@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatPlay Mestre
 // @namespace    chatplay.mestre
-// @version      3.0.6
+// @version      3.0.7
 // @description  Calculadora de propostas, abordagem automática, vínculo da tabulação, sinalizados com aviso, retomada em lote, setor na fila, contagem por cliente e WallPaper — integrado ao ChatPlay do CRM.
 // @author       Elite Team
 // @match        https://crm.bookplay.com.br/*
@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  const VERSAO = '3.0.6';
+  const VERSAO = '3.0.7';
   /** Carteira desta versão: 'cofen' (crm.pagueplay.com.br) ou 'bookplay' (crm.bookplay.com.br). */
   const CARTEIRA = 'bookplay';
   // Rótulo pelo endereço aberto; as regras do cliente (Coren, Faculdade, Bookplay…) são as mesmas nos dois
@@ -59,6 +59,8 @@
   const EH_COFEN = false;
   /** Trava de setores (opcional, vem desligada): existe em todas as versões menos no Cofen. */
   const COM_TRAVA = !EH_COFEN;
+  /** Arquivo publicado no GitHub (a versão gerada para uso põe o endereço; vazio = não confere). */
+  const URL_ATUALIZACAO = 'https://raw.githubusercontent.com/clebermitho/Chatplay-Mestre-Bookplay/main/ChatPlay-Mestre-BookPlay.user.js';
 
   // ═══════════════════════════════════════════════════════════════════════
   // 1. NÚCLEO
@@ -4378,6 +4380,26 @@ svg{flex:none;display:block}
 .acoes .bt{height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--borda);background:var(--fundo);color:var(--texto);font-size:13px;font-weight:600}
 .acoes .bt.pri{background:var(--pri);border-color:var(--pri);color:#fff}
 @keyframes piscar{50%{opacity:.35}}
+
+/* ── nova versão ── */
+.nova{position:fixed;right:18px;bottom:18px;z-index:2147483590;width:min(360px,calc(100vw - 36px));padding:16px;border-radius:18px;
+  background:var(--fundo);border:1px solid var(--borda);box-shadow:0 24px 60px -16px rgba(2,6,23,.5);overflow:hidden}
+.nova::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--pri),#06b6d4,#818cf8,var(--pri));
+  background-size:200% 100%;animation:correr 2.4s linear infinite}
+.nova .topo-n{display:flex;gap:12px;align-items:flex-start}
+.nova .ic-n{position:relative;width:40px;height:40px;flex:none;border-radius:13px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--pri),#06b6d4)}
+.nova .ic-n svg{animation:girar-n 2.6s cubic-bezier(.6,0,.4,1) infinite}
+.nova .ic-n::after{content:'';position:absolute;inset:-5px;border-radius:17px;border:2px solid var(--pri);opacity:0;animation:onda 2.4s ease-out infinite}
+.nova b{display:block;font-size:14px;line-height:19px;color:var(--texto)}
+.nova small{display:block;font-size:12.5px;line-height:17px;color:var(--suave);margin-top:2px}
+.nova small b{display:inline;font-size:inherit;color:var(--texto)}
+.nova .acoes-n{display:flex;gap:8px;margin-top:14px}
+.nova .acoes-n button{flex:1;height:36px;border-radius:11px;border:1px solid var(--borda);background:var(--fundo);color:var(--texto);font-size:13px;font-weight:600}
+.nova .acoes-n button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.nova .acoes-n button:hover{filter:brightness(1.06)}
+.nova ol{margin:10px 0 0;padding-left:18px;font-size:12.5px;line-height:18px;color:var(--texto)}
+@keyframes correr{to{background-position:-200% 0}}
+@keyframes girar-n{0%,60%{transform:rotate(0)}100%{transform:rotate(360deg)}}
 `;
 
   const boasVindas = (() => {
@@ -4604,11 +4626,85 @@ svg{flex:none;display:block}
       corpoEl.prepend(el);
     }
 
-    function iniciar() {
-      // Espera a tela do ChatPlay assentar; o aviso vem antes de qualquer outra coisa
-      setTimeout(() => aviso(), 1200);
+    // ── nova versão no GitHub ──
+    // O Tampermonkey só confere atualizações 1× por dia. Aqui o próprio Mestre olha o
+    // arquivo publicado (ao abrir e a cada 20 min, com a aba à vista) e, se houver versão
+    // maior, mostra um card com «Atualizar agora». Usa o fetch da página: o GitHub libera
+    // o arquivo para qualquer site e não precisa de permissão nova no Tampermonkey.
+    const CH_ATUALIZACAO = 'mestre.atualizacao.' + (EH_COFEN ? 'cofen' : 'bookplay');
+    const INTERVALO = 20 * 60000;
+    const maior = (a, b) => {
+      const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+      for (let k = 0; k < Math.max(x.length, y.length); k++) if ((x[k] || 0) !== (y[k] || 0)) return (x[k] || 0) > (y[k] || 0);
+      return false;
+    };
+    let cardNova = null;
+    async function versaoPublicada() {
+      // Várias abas e PCs: uma consulta a cada 20 min por navegador basta
+      const guardado = LS.ler(CH_ATUALIZACAO, null);
+      if (guardado?.em && Date.now() - guardado.em < INTERVALO) return guardado.versao;
+      const r = await fetchOriginal.call(PAGINA, URL_ATUALIZACAO, { cache: 'no-store' });
+      if (!r.ok) throw new Error('GitHub respondeu ' + r.status);
+      const versao = ((await r.text()).match(/@version\s+([\d.]+)/) || [])[1] || null;
+      LS.gravar(CH_ATUALIZACAO, { em: Date.now(), versao });
+      return versao;
     }
-    return { iniciar, aviso, tutorial, cardNoPainel };
+    async function conferirVersao() {
+      if (!URL_ATUALIZACAO || document.hidden || cardNova) return;
+      let publicada;
+      try { publicada = await versaoPublicada(); } catch { return; } // sem internet ou GitHub fora: tenta depois
+      if (!publicada || !maior(publicada, VERSAO)) return;
+      const depois = LS.ler(CH_ATUALIZACAO + '.depois', null);
+      if (depois?.versao === publicada && Date.now() < depois.ate) return;
+      mostrarNovaVersao(publicada);
+    }
+    function mostrarNovaVersao(publicada) {
+      montarHost();
+      cardNova = document.createElement('div');
+      cardNova.className = 'nova';
+      cardNova.setAttribute('role', 'status');
+      const passo1 = () => {
+        cardNova.innerHTML = `<div class="topo-n"><span class="ic-n">${icone('atualizar', 20)}</span><div><b>Nova versão do ChatPlay Mestre</b>
+          <small>Versão <b>${esc(publicada)}</b> disponível. Você está na ${esc(VERSAO)}. Leva 10 segundos.</small></div></div>
+          <div class="acoes-n"><button type="button" data-depois>Depois</button><button type="button" class="pri" data-atualizar>Atualizar agora</button></div>`;
+        cardNova.querySelector('[data-depois]').addEventListener('click', () => {
+          LS.gravar(CH_ATUALIZACAO + '.depois', { versao: publicada, ate: Date.now() + 2 * 3600000 }); // volta a lembrar em 2 h
+          fecharNova();
+        });
+        cardNova.querySelector('[data-atualizar]').addEventListener('click', () => {
+          // O Tampermonkey abre a tela de atualização quando a aba nova carrega o .user.js
+          PAGINA.open(URL_ATUALIZACAO, '_blank');
+          passo2();
+        });
+      };
+      const passo2 = () => {
+        cardNova.innerHTML = `<div class="topo-n"><span class="ic-n">${icone('atualizar', 20)}</span><div><b>Quase lá</b>
+          <ol><li>Na aba que abriu, clique em <b>Atualizar</b> (ou <b>Reinstalar</b>).</li><li>Volte aqui e clique em <b>Recarregar</b>.</li></ol></div></div>
+          <div class="acoes-n"><button type="button" data-fechar>Fechar</button><button type="button" class="pri" data-recarregar>Recarregar</button></div>`;
+        cardNova.querySelector('[data-fechar]').addEventListener('click', fecharNova);
+        cardNova.querySelector('[data-recarregar]').addEventListener('click', () => PAGINA.location.reload());
+      };
+      passo1();
+      raizBV.appendChild(cardNova);
+      cardNova.animate([{ opacity: 0, transform: 'translateY(16px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(.2,.9,.25,1.05)' });
+    }
+    function fecharNova() {
+      if (!cardNova) return;
+      const el = cardNova;
+      cardNova = null;
+      el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(12px)' }], { duration: 200, easing: 'ease-in', fill: 'forwards' }).onfinish = () => el.remove();
+    }
+
+    function iniciar() {
+      // Espera a tela do ChatPlay assentar; o aviso vem antes de qualquer outra coisa,
+      // e só depois dele o card de versão nova
+      setTimeout(() => aviso().then(() => {
+        conferirVersao();
+        setInterval(conferirVersao, 5 * 60000); // a consulta de verdade só sai a cada 20 min (cache acima)
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) conferirVersao(); });
+      }), 1200);
+    }
+    return { iniciar, aviso, tutorial, cardNoPainel, conferirVersao };
   })();
 
   // ═══════════════════════════════════════════════════════════════════════
