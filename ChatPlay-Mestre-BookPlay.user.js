@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatPlay Mestre
 // @namespace    chatplay.mestre
-// @version      3.0.5
+// @version      3.0.6
 // @description  Calculadora de propostas, abordagem automática, vínculo da tabulação, sinalizados com aviso, retomada em lote, setor na fila, contagem por cliente e WallPaper — integrado ao ChatPlay do CRM.
 // @author       Elite Team
 // @match        https://crm.bookplay.com.br/*
@@ -50,15 +50,15 @@
 (function () {
   'use strict';
 
-  const VERSAO = '3.0.5';
-  /** A versão «com trava do Play 3» é gerada com isto em true. */
-  const COM_TRAVA = false;
+  const VERSAO = '3.0.6';
   /** Carteira desta versão: 'cofen' (crm.pagueplay.com.br) ou 'bookplay' (crm.bookplay.com.br). */
   const CARTEIRA = 'bookplay';
   // Rótulo pelo endereço aberto; as regras do cliente (Coren, Faculdade, Bookplay…) são as mesmas nos dois
   const NOME_CARTEIRA = typeof location !== 'undefined' && /pagueplay/i.test(location.hostname) ? 'PaguePlay' : 'BookPlay';
   /** O «ChatPlay Mestre Cofen» é gerado desta base com isto em true. */
   const EH_COFEN = false;
+  /** Trava de setores (opcional, vem desligada): existe em todas as versões menos no Cofen. */
+  const COM_TRAVA = !EH_COFEN;
 
   // ═══════════════════════════════════════════════════════════════════════
   // 1. NÚCLEO
@@ -261,6 +261,14 @@
     if (sv.includes('EM DIA')) return 'PlayEmDia';
     if (sv.includes('JORNADA') || sv.includes('RECEPTIVO')) return temAtraso ? 'Play1' : 'PlayEmDia';
     return null;
+  }
+
+  /** Setor pelo NOME DA PASTA, só quando ela diz: «Play 3 SV» → Play3, «Em dia» → PlayEmDia. */
+  function setorDaPasta(pasta) {
+    const p = String(pasta || '').toUpperCase();
+    const n = p.match(/PLAY\s*([1-6])(?!\d)/);
+    if (n) return 'Play' + n[1];
+    return /EM\s+DIA/.test(p) ? 'PlayEmDia' : null;
   }
 
   // ── 1.3 Modelos de mensagem ─────────────────────────────────────────────
@@ -882,7 +890,7 @@
     module.exports = {
       Dinheiro, SETORES, calcular, renderizarModelo, MODELOS_FIXOS, normalizarContratos, normalizarContato,
       acordoDaTabulacao, setorPeloVinculo, normalizarNome, CONDICOES, VARIAVEIS_GERAIS, formatarTel, corrigirSaudacao, chaveTel, departamentoCurto, instituicaoDoPlano, instituicaoDaPasta, corenDoCliente, moda,
-      setorDaQualidade, acordoDoSistema, ultimaTabulacao, negociacaoEmAndamento, vinculoDaTabulacao, ehUsuarioPaguePlay
+      setorDaQualidade, acordoDoSistema, ultimaTabulacao, negociacaoEmAndamento, vinculoDaTabulacao, ehUsuarioPaguePlay, setorDaPasta
     };
     return;
   }
@@ -906,7 +914,6 @@
     cronometro: { nome: 'Contagem por cliente', desc: 'Tempo na fila desde a primeira mensagem enviada, com aviso no fim.' },
     papel: { nome: 'WallPaper', desc: 'Imagem ou tema de fundo na conversa.' }
   };
-  if (COM_TRAVA) MODULOS.identificador.desc = 'Etiqueta com a pasta de cada cliente e a trava do Play 3.';
 
   function cfgPadrao() {
     const setores = {};
@@ -917,7 +924,7 @@
       };
     }
     return {
-      versao: 3,
+      versao: 4,
       operador: '',
       modulos: Object.fromEntries(Object.keys(MODULOS).map(k => [k, true])),
       calc: { setores, pixAuto: true, parcelasCartao: 12, ultimoSetor: null, diasQualidade: 30 },
@@ -935,7 +942,8 @@
         marcadorRecuperacao: true,  // marcador de retomada na lista
         contadorNaAba: true         // (2) no título da aba com sinalizados novos
       },
-      trava: { ligada: true, inicio: '07:00', fim: '17:00' }
+      // Trava de setores: DESLIGADA por padrão; cada pessoa liga e escolhe os setores em Ajustes
+      trava: { ligada: false, setores: ['Play3'], inicio: '07:00', fim: '17:00' }
     };
   }
 
@@ -960,6 +968,13 @@
     if (cfg.crono.minutos === 59) cfg.crono.minutos = 60;
     cfg.versao = 3;
   }
+  // 3.0.6: a trava entrou na versão principal e vem desligada (a config salva antes dizia «ligada»)
+  if ((Number(cfg.versao) || 3) < 4) {
+    cfg.trava.ligada = false;
+    if (!Array.isArray(cfg.trava.setores)) cfg.trava.setores = ['Play3'];
+    cfg.versao = 4;
+  }
+  if (!Array.isArray(cfg.trava.setores)) cfg.trava.setores = ['Play3'];
   for (const k of ['atalhos', 'confirmarFinalizar', 'transf', 'janela']) delete cfg[k];
   for (const k of ['transferencia', 'alertas', 'cpf']) delete cfg.modulos[k];
   for (const k of ['linhaPlay3', 'rotuloLancador', 'avisarConversaAberta', 'setorCarregando']) delete cfg.visual[k];
@@ -1644,7 +1659,12 @@
     for (const t of ['pointerdown', 'mousedown', 'mouseup', 'touchstart', 'click']) el.addEventListener(t, e => e.stopPropagation());
     return el;
   }
-  const PLAY3 = /(^|\s)play\s*3(?!\d)/i; // Play 3, Play 3 SV, Célula Play 3 — não Play 30
+  /** Pasta de um setor travado (e a trava ligada, no horário)? */
+  function pastaTravada(pasta) {
+    if (!COM_TRAVA || !cfg.trava.ligada || !trava.valendo()) return false;
+    const s = setorDaPasta(pasta);
+    return !!s && cfg.trava.setores.includes(s);
+  }
 
   // ── 5.1 Setor na fila ───────────────────────────────────────────────────
   // A linha da fila já traz o atendimento (props React): a pasta vem do
@@ -1661,7 +1681,7 @@
         let el = linha.querySelector('.mst-setor');
         const mostrar = att && (secao === 'aguardando' || (secao === 'andamento' && cfg.visual.setorEmAtendimento));
         const pasta = mostrar ? nomePasta(att.departmentId) || att.sectorName || '' : '';
-        const play3 = COM_TRAVA && !!pasta && PLAY3.test(pasta) && secao === 'aguardando';
+        const play3 = secao === 'aguardando' && !!pasta && pastaTravada(pasta);
         if (linha.hasAttribute('data-mst-play3') !== play3) linha.toggleAttribute('data-mst-play3', play3);
         if (!pasta) { el?.remove(); continue; }
         const chave = `${pasta}|${att.hashIconCompany}`;
@@ -2562,11 +2582,12 @@
     };
   })();
 
-  // ── 5.8 Trava do Play 3 (só na versão «com trava») ──────────────────────
+  // ── 5.8 Trava de setores (opcional, vem desligada) ──────────────────────
   //
-  // No «Sim» da janela «Iniciar atendimento», dentro do horário da trava:
-  // cliente do Play 3 (pelo agendamento recente da qualidade ou, sem ele, pela
-  // pasta por onde entrou) é segurado com uma tela vermelha.
+  // No «Sim» da janela «Iniciar atendimento», com a trava ligada e no horário:
+  // cliente de um setor escolhido em Ajustes (pelo agendamento recente da
+  // qualidade ou, sem ele, pela pasta por onde entrou) é segurado com uma tela
+  // vermelha. Não existe no Cofen.
 
   const trava = (() => {
     const qualidadePorAtt = new Map();
@@ -2580,12 +2601,15 @@
       const q = attId != null ? qualidadePorAtt.get(String(attId)) : null;
       return q && q !== 'buscando' && q.setor && q.dias != null && q.dias <= (Number(cfg.calc.diasQualidade) || 30) ? q : null;
     }
-    /** Play 3? A qualidade recente manda; sem ela, vale a pasta por onde entrou. */
+    /** Setor travado? A qualidade recente manda; sem ela, vale a pasta por onde entrou. */
     function setorTravado(att) {
+      const alvo = cfg.trava.setores || [];
+      if (!alvo.length) return '';
       const q = qualidadeRecente(att?.id);
-      if (q) return q.setor === 'Play3' ? q.texto : '';
+      if (q) return alvo.includes(q.setor) ? q.texto : '';
       const pasta = nomePasta(att?.departmentId) || '';
-      return PLAY3.test(pasta) ? pasta : '';
+      const s = setorDaPasta(pasta);
+      return s && alvo.includes(s) ? pasta : '';
     }
     const minutos = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
     function valendo(t = cfg.trava) {
@@ -2622,7 +2646,7 @@
     }
 
     function aoClicar(ev) {
-      if (!COM_TRAVA || !ligado('identificador')) return;
+      if (!COM_TRAVA || !cfg.trava.ligada) return;
       // Clique numa linha de «Aguardando»: já busca a qualidade (fica pronta antes do «Sim»)
       const linha = ev.target?.closest?.(SEL.linha);
       if (linha && secaoDaLinha(linha) === 'aguardando') { buscarQualidade(attDaLinha(linha)?.id); return; }
@@ -4160,10 +4184,13 @@ input[type=range]{width:100%;accent-color:var(--primary)}
       <div class="secao"><span>Informações na tela</span></div>
       <div class="cartao">${VISUAIS.map(([id, nome, desc]) => `<label class="opcao"><div><b>${esc(nome)}</b><small>${esc(desc)}</small></div>${chave(`data-visual="${id}"`, cfg.visual[id], nome)}</label>`).join('')}</div>
       ${COM_TRAVA ? `
-      <div class="secao"><span>Trava do Play 3</span></div>
+      <div class="secao"><span>Trava de setores</span><small>opcional</small></div>
       <div class="cartao">
-        <label class="opcao"><div><b>Trava ligada</b><small>No «Sim» de iniciar, cliente do Play 3 é segurado com uma tela vermelha.</small></div>${chave('id="aj-trava"', cfg.trava.ligada, 'Trava')}</label>
-        <div class="opcao"><div><b>Horário</b><small>${trava.valendo() ? 'Valendo agora.' : 'Fora do horário agora.'}</small></div><div class="linha"><input type="time" class="entrada" id="aj-trava-ini" value="${esc(cfg.trava.inicio)}" style="width:110px;height:30px"><small>às</small><input type="time" class="entrada" id="aj-trava-fim" value="${esc(cfg.trava.fim)}" style="width:110px;height:30px"></div></div>
+        <label class="opcao"><div><b>Trava ligada</b><small>No «Sim» de iniciar, cliente de um setor travado é segurado com uma tela vermelha. Vem desligada.</small></div>${chave('id="aj-trava"', cfg.trava.ligada, 'Trava')}</label>
+        <div class="opcao" style="flex-direction:column;align-items:stretch;gap:8px"><div><b>Setores travados</b><small>Clique para marcar ou desmarcar. Vale o agendamento recente da qualidade; sem ele, a pasta por onde o cliente entrou.</small></div>
+          <div class="fichas">${ORDEM_SETORES.map(id => `<button type="button" class="ficha" data-trava-setor="${id}" aria-pressed="${cfg.trava.setores.includes(id)}">${esc(SETORES[id].nome)}</button>`).join('')}</div>
+          ${!cfg.trava.setores.length ? '<div class="dica" style="color:#b45309">Nenhum setor marcado: a trava não segura ninguém.</div>' : ''}</div>
+        <div class="opcao"><div><b>Horário</b><small>${!cfg.trava.ligada ? 'Trava desligada.' : trava.valendo() ? 'Valendo agora.' : 'Fora do horário agora.'}</small></div><div class="linha"><input type="time" class="entrada" id="aj-trava-ini" value="${esc(cfg.trava.inicio)}" style="width:110px;height:30px"><small>às</small><input type="time" class="entrada" id="aj-trava-fim" value="${esc(cfg.trava.fim)}" style="width:110px;height:30px"></div></div>
       </div>` : ''}
       ${ligado('calculadora') ? `
       <div class="secao"><span>Setores e descontos</span></div>
@@ -4187,7 +4214,7 @@ input[type=range]{width:100%;accent-color:var(--primary)}
       </div>` : ''}
       <div class="linha" style="justify-content:center"><button type="button" class="bt pequeno" id="aj-tutorial">${icone('mestre', 14)}Ver o tutorial</button><button type="button" class="bt pequeno" id="aj-aviso">${icone('alerta', 14)}Rever o aviso</button></div>
       <div class="linha" style="justify-content:center"><button type="button" class="bt pequeno perigo" id="aj-reset">Restaurar ajustes (mantém mensagens e imagem)</button></div>
-      <div class="versao">ChatPlay Mestre ${VERSAO} · ${NOME_CARTEIRA}${COM_TRAVA ? ' · com trava do Play 3' : ''} · Alt+C abre e fecha</div>`;
+      <div class="versao">ChatPlay Mestre ${VERSAO} · ${NOME_CARTEIRA}${COM_TRAVA && cfg.trava.ligada ? ' · trava ligada' : ''} · Alt+C abre e fecha</div>`;
 
     corpo.querySelector('#aj-nome').addEventListener('input', e => { cfg.operador = e.target.value.trim(); salvarCfg(); });
     corpo.querySelectorAll('[data-modulo]').forEach(c => c.addEventListener('change', () => {
@@ -4202,7 +4229,14 @@ input[type=range]{width:100%;accent-color:var(--primary)}
       salvarCfg(true);
       aplicarModulos();
     }));
-    corpo.querySelector('#aj-trava')?.addEventListener('change', e => { cfg.trava.ligada = e.target.checked; salvarCfg(); });
+    corpo.querySelector('#aj-trava')?.addEventListener('change', e => { cfg.trava.ligada = e.target.checked; salvarCfg(true); setorFila.desenhar(); desenhar(); });
+    corpo.querySelectorAll('[data-trava-setor]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.travaSetor;
+      cfg.trava.setores = cfg.trava.setores.includes(id) ? cfg.trava.setores.filter(x => x !== id) : [...cfg.trava.setores, id];
+      salvarCfg(true);
+      setorFila.desenhar();
+      desenhar();
+    }));
     corpo.querySelector('#aj-trava-ini')?.addEventListener('change', e => { cfg.trava.inicio = e.target.value || '07:00'; salvarCfg(); });
     corpo.querySelector('#aj-trava-fim')?.addEventListener('change', e => { cfg.trava.fim = e.target.value || '17:00'; salvarCfg(); });
     corpo.querySelectorAll('[data-ativo]').forEach(c => c.addEventListener('change', () => {
@@ -4654,7 +4688,7 @@ svg{flex:none;display:block}
     setTimeout(avisarDuplicado, 5000);
     // Depuração: com localStorage «mestre.debug» = 1, dá para simular eventos no console
     if (LS.ler('mestre.debug', 0) === 1) PAGINA.__mestreTeste = { emitir: (...a) => ponte.emitir(...a), sinalizados, cfg };
-    console.log(`[ChatPlay Mestre] ${VERSAO} ${NOME_CARTEIRA}${COM_TRAVA ? ' (trava do Play 3)' : ''} ativo.`);
+    console.log(`[ChatPlay Mestre] ${VERSAO} ${NOME_CARTEIRA}${COM_TRAVA && cfg.trava.ligada ? ' (trava de setores ligada)' : ''} ativo.`);
   }
 
   // O CRM troca de tela sem recarregar (login → main → chatplay): confere a rota.

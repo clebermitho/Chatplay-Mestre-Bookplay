@@ -14,6 +14,7 @@ com as regras da BookPlay.
 - **Dados do cliente**: CPF, telefone e protocolo com botão de copiar.
 - **Sinalizados com aviso**: som, card e notificação quando o cliente escreve, mesmo depois de finalizado.
 - **Retomar conversas** em lote, **pasta** de cada cliente na fila, **contagem** de tempo e **papel de parede**.
+- **Trava de setores (opcional, vem desligada)**: em Ajustes, escolha quais setores travar (Play em dia, Play 1 a Play 6) e o horário. No «Sim» de iniciar, cliente de um setor travado é segurado com uma tela vermelha.
 
 ## Como instalar
 
