@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatPlay Mestre
 // @namespace    chatplay.mestre
-// @version      3.0.7
+// @version      3.0.8
 // @description  Calculadora de propostas, abordagem automática, vínculo da tabulação, sinalizados com aviso, retomada em lote, setor na fila, contagem por cliente e WallPaper — integrado ao ChatPlay do CRM.
 // @author       Elite Team
 // @match        https://crm.bookplay.com.br/*
@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  const VERSAO = '3.0.7';
+  const VERSAO = '3.0.8';
   /** Carteira desta versão: 'cofen' (crm.pagueplay.com.br) ou 'bookplay' (crm.bookplay.com.br). */
   const CARTEIRA = 'bookplay';
   // Rótulo pelo endereço aberto; as regras do cliente (Coren, Faculdade, Bookplay…) são as mesmas nos dois
@@ -1607,6 +1607,20 @@
   /** Pasta (departmentId → nome): /user/{id}/departments e o que o socket ensinar. */
   const pastasAprendidas = new Map(LS.ler('mestre.pastas', []));
   const nomePasta = dep => (dep == null ? '' : pastasAprendidas.get(String(dep)) || String(PASTAS[dep] || '').split('/').pop().trim());
+  /**
+   * Pasta do atendimento para MOSTRAR. O nome da pasta só vem para quem é membro dela
+   * (/user/{id}/departments); sem ele, a regional sai da sigla do canal («Crma» → «Coren - MA»),
+   * e só em último caso fica o setor genérico («Pague Coren»). Coren sempre no formato «Coren - MA».
+   */
+  function pastaDoAtt(att) {
+    const nome = nomePasta(att?.departmentId);
+    const coren = String(nome || '').match(/^\s*Coren\s*-?\s*([A-Za-z]{2})\s*$/);
+    if (coren) return 'Coren - ' + coren[1].toUpperCase();
+    if (nome) return nome;
+    const sigla = String(att?.accountAcronym || '').match(/^\s*cr([a-z]{2})\s*$/i);
+    if (sigla) return 'Coren - ' + sigla[1].toUpperCase();
+    return att?.sectorName || '';
+  }
   async function carregarPastas() {
     try {
       const lista = await chamarApi(`/user/${await usuarioId()}/departments`);
@@ -1682,7 +1696,7 @@
         const secao = secaoDaLinha(linha);
         let el = linha.querySelector('.mst-setor');
         const mostrar = att && (secao === 'aguardando' || (secao === 'andamento' && cfg.visual.setorEmAtendimento));
-        const pasta = mostrar ? nomePasta(att.departmentId) || att.sectorName || '' : '';
+        const pasta = mostrar ? pastaDoAtt(att) : '';
         const play3 = secao === 'aguardando' && !!pasta && pastaTravada(pasta);
         if (linha.hasAttribute('data-mst-play3') !== play3) linha.toggleAttribute('data-mst-play3', play3);
         if (!pasta) { el?.remove(); continue; }
@@ -2434,7 +2448,7 @@
         const ultima = a.lastUpdate ? new Date(a.lastUpdate).getTime() : NaN;
         mapa.set(String(a.id), {
           nome: (a.name || '').replace(/\s*\(\d+\)\s*$/, '').trim(),
-          pasta: nomePasta(a.departmentId) || a.sectorName || '',
+          pasta: pastaDoAtt(a),
           operador: a.usernameAttendant || '',
           ultima: Number.isFinite(ultima) ? ultima : null
         });
