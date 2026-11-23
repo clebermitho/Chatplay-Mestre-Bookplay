@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatPlay Mestre
 // @namespace    chatplay.mestre
-// @version      3.0.8
+// @version      3.0.9
 // @description  Calculadora de propostas, abordagem automática, vínculo da tabulação, sinalizados com aviso, retomada em lote, setor na fila, contagem por cliente e WallPaper — integrado ao ChatPlay do CRM.
 // @author       Elite Team
 // @match        https://crm.bookplay.com.br/*
@@ -50,7 +50,7 @@
 (function () {
   'use strict';
 
-  const VERSAO = '3.0.8';
+  const VERSAO = '3.0.9';
   /** Carteira desta versão: 'cofen' (crm.pagueplay.com.br) ou 'bookplay' (crm.bookplay.com.br). */
   const CARTEIRA = 'bookplay';
   // Rótulo pelo endereço aberto; as regras do cliente (Coren, Faculdade, Bookplay…) são as mesmas nos dois
@@ -460,7 +460,7 @@
         'Você gostaria de transferir o pagamento pelo pix ou para o cartão?\n\n' +
         '*Opção 1:* Pagamento via pix no valor de *{{ACORDO_VALOR}}*\n' +
         '*Opção 2:* Pagamento via cartão de crédito em *{{ACORDO_PARCELAS}}x* de *{{ACORDO_CARTAO}}*\n' +
-        '{{#ACORDO_PARCELADO}}*Opção 3:* Verificar o melhor desconto para quitação hoje\n{{/ACORDO_PARCELADO}}\n' +
+        '*Opção 3:* Verificar o melhor desconto para quitação hoje\n\n' +
         'Como podemos concluir? 😊'
     },
     {
@@ -472,7 +472,7 @@
         'Você gostaria de transferir o pagamento para o cartão de crédito?\n\n' +
         '*Opção 1:* Pagamento via pix no valor de *{{ACORDO_VALOR}}*\n' +
         '*Opção 2:* Pagamento via cartão de crédito em *{{ACORDO_PARCELAS}}x* de *{{ACORDO_CARTAO}}*\n' +
-        '{{#ACORDO_PARCELADO}}*Opção 3:* Verificar o melhor desconto para quitação hoje\n{{/ACORDO_PARCELADO}}\n' +
+        '*Opção 3:* Verificar o melhor desconto para quitação hoje\n\n' +
         'Como podemos concluir? 😊'
     },
     {

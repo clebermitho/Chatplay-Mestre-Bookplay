@@ -10,7 +10,7 @@ com as regras da BookPlay.
 
 - **Calculadora de propostas** com os valores do cliente aberto e a mensagem pronta (botão ao lado das mensagens rápidas).
 - **Abordagem automática** no «Sim» de iniciar: apresentação, acordo, quebra de acordo ou negociação em andamento,
-  com o **valor exato do acordo** e a **Opção 3** (quitação) quando o acordo é parcelado.
+  com o **valor exato do acordo** e a **Opção 3** (melhor desconto para quitação hoje) no acordo e na quebra.
 - **Dados do cliente**: CPF, telefone e protocolo com botão de copiar.
 - **Sinalizados com aviso**: som, card e notificação quando o cliente escreve, mesmo depois de finalizado.
 - **Retomar conversas** em lote, **pasta** de cada cliente na fila, **contagem** de tempo e **papel de parede**.
